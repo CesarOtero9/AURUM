@@ -9,6 +9,7 @@ description = "AURUM fiscal and accounting intelligence platform"
 requires-python = ">=3.12,<3.13"
 
 dependencies = [
+    "defusedxml>=0.7,<1.0",
     "fastapi>=0.116,<1.0",
     "uvicorn[standard]>=0.35,<1.0",
 ]

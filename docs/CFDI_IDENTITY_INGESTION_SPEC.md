@@ -1,6 +1,6 @@
 # AURUM — CFDI Identity & Immutable Ingestion Specification
 
-**Status:** Proposed design — pending review
+**Status:** Accepted
 **Scope:** CFDI Core — identity and immutable XML evidence only
 
 ---

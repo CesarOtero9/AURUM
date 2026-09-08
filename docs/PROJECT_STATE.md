@@ -13,8 +13,10 @@
 AURUM has a documented product and architectural foundation, plus an initial backend
 bootstrap. The bootstrap uses Python 3.12, a `src` package layout, FastAPI, and pytest.
 
-It exposes only the technical health endpoint (`GET /health`). No fiscal, accounting,
-database, authentication, or worker capability has been implemented.
+It exposes only the technical health endpoint (`GET /health`). The first fiscal slice,
+CFDI Identity & Immutable Ingestion, is implemented as domain/application logic with a
+secure XML reader and in-memory test adapters. No database, authentication, worker, or
+other fiscal/accounting capability has been implemented.
 
 The package follows the agreed modular-monolith boundaries: `domain`, `application`,
 `infrastructure`, and `api`. Quality checks include strict pytest configuration and Ruff
@@ -331,10 +333,10 @@ It must remain excluded from Git.
 | Technical Architecture  | Complete (initial)       |
 | Domain Model            | Complete (initial)       |
 | Database Design         | Complete (initial)       |
-| Backend                 | Bootstrap implemented    |
+| Backend                 | Identity ingestion slice implemented |
 | Frontend                | ⚪ Not started            |
 | Jobs / Workers          | ⚪ Not started            |
-| Tests                   | Health and quality baseline |
+| Tests                   | Health and identity ingestion coverage |
 | CI/CD                   | ⚪ Not started            |
 | Deployment              | ⚪ Not started            |
 | Lu integration          | ⚪ Future                 |
@@ -343,14 +345,15 @@ It must remain excluded from Git.
 
 # 7. Immediate next objective
 
-The first vertical slice has a proposed design pending review:
+The first vertical slice is implemented according to the approved implementation scope:
 
 > **CFDI Identity & Immutable Ingestion.**
 
 The specification defines immutable evidence, SHA-256, and identity extraction only from
 the `UUID` attribute of `{http://www.sat.gob.mx/TimbreFiscalDigital}TimbreFiscalDigital`,
 as well as canonical UUIDs, duplicate/conflict policy, ports, invariants, transaction
-boundary, and required tests. No implementation exists yet.
+boundary, and required tests. The implementation has no production persistence adapter
+or HTTP endpoint.
 
 ---
 
@@ -418,7 +421,7 @@ Completion criteria:
 
 After that:
 
-**Milestone: CFDI Identity & Immutable Ingestion design review.**
+**Milestone: CFDI Identity & Immutable Ingestion review and closure.**
 
 ---
 
