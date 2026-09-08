@@ -355,6 +355,11 @@ as well as canonical UUIDs, duplicate/conflict policy, ports, invariants, transa
 boundary, and required tests. The implementation has no production persistence adapter
 or HTTP endpoint.
 
+The minimum production persistence design is proposed and under review in
+`CFDI_IDENTITY_PERSISTENCE_SPEC.md`. It specifies PostgreSQL `BYTEA` evidence storage,
+identity/evidence constraints, conflict and provenance records, transactions, and
+concurrency safeguards. No persistence implementation exists yet.
+
 ---
 
 # 8. Near-term documents
@@ -421,7 +426,7 @@ Completion criteria:
 
 After that:
 
-**Milestone: CFDI Identity & Immutable Ingestion review and closure.**
+**Milestone: CFDI Identity persistence design review.**
 
 ---
 
