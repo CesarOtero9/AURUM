@@ -364,6 +364,9 @@ including 18 PostgreSQL integration tests.
 The `CFDI Header / Fiscal Core` parsing design is accepted; implementation has not
 started.
 
+The `CFDI Header / Fiscal Core` persistence design is accepted; implementation has not
+started.
+
 ---
 
 # 8. Near-term documents
