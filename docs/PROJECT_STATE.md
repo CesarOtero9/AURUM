@@ -343,13 +343,14 @@ It must remain excluded from Git.
 
 # 7. Immediate next objective
 
-The next major activity is to specify the first coherent vertical slice:
+The first vertical slice has a proposed design pending review:
 
 > **CFDI Identity & Immutable Ingestion.**
 
-Before implementation, define its application contract and its minimum persistence model.
-The slice must preserve original XML evidence, calculate SHA-256, obtain identity only
-from `TimbreFiscalDigital/@UUID`, and handle duplicate UUIDs explicitly.
+The specification defines immutable evidence, SHA-256, and identity extraction only from
+the `UUID` attribute of `{http://www.sat.gob.mx/TimbreFiscalDigital}TimbreFiscalDigital`,
+as well as canonical UUIDs, duplicate/conflict policy, ports, invariants, transaction
+boundary, and required tests. No implementation exists yet.
 
 ---
 
@@ -417,7 +418,7 @@ Completion criteria:
 
 After that:
 
-**Milestone: CFDI Identity & Immutable Ingestion design.**
+**Milestone: CFDI Identity & Immutable Ingestion design review.**
 
 ---
 
