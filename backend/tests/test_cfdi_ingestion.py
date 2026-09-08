@@ -6,7 +6,7 @@ from hashlib import sha256
 
 import pytest
 
-from aurum.application.cfdi_ingestion import IngestCfdiXml
+from aurum.application.cfdi_ingestion import IdentityRegistration, IngestCfdiXml
 from aurum.domain.cfdi_identity import (
     CfdiIdentity,
     CfdiUuid,
@@ -50,23 +50,40 @@ class InMemoryIdentityRepository:
     def get_by_digest(self, digest: Sha256Digest) -> CfdiIdentity | None:
         return self.identities_by_digest.get(digest)
 
-    def add(self, identity: CfdiIdentity) -> None:
+    def register(self, identity: CfdiIdentity) -> IdentityRegistration:
+        existing = self.identities_by_uuid.get(identity.uuid)
+        if existing is not None:
+            return IdentityRegistration(identity=existing, created=False)
         self.identities_by_uuid[identity.uuid] = identity
         self.identities_by_digest[identity.evidence.sha256] = identity
+        return IdentityRegistration(identity=identity, created=True)
 
 
 @dataclass
 class InMemoryEvidenceStore:
     evidence_by_digest: dict[Sha256Digest, XmlEvidence] = field(default_factory=dict)
 
-    def store(self, evidence: XmlEvidence) -> None:
+    extracted_by_digest: dict[Sha256Digest, CfdiUuid] = field(default_factory=dict)
+
+    def store(self, evidence: XmlEvidence, extracted_uuid: CfdiUuid) -> None:
+        existing = self.extracted_by_digest.get(evidence.sha256)
+        if existing is not None and existing != extracted_uuid:
+            raise EvidenceIdentityMismatch("Evidence digest has another extracted UUID")
         self.evidence_by_digest.setdefault(evidence.sha256, evidence)
+        self.extracted_by_digest.setdefault(evidence.sha256, extracted_uuid)
+
+    def get_by_digest(self, digest: Sha256Digest) -> CfdiUuid | None:
+        return self.extracted_by_digest.get(digest)
 
 
 @dataclass
 class InMemoryIngestionRecords:
+    accepted: list[tuple[CfdiIdentity, XmlEvidence]] = field(default_factory=list)
     reingestions: list[tuple[CfdiIdentity, XmlEvidence]] = field(default_factory=list)
     conflicts: list[IdentityConflict] = field(default_factory=list)
+
+    def record_accepted(self, identity: CfdiIdentity, evidence: XmlEvidence) -> None:
+        self.accepted.append((identity, evidence))
 
     def record_reingestion(self, identity: CfdiIdentity, evidence: XmlEvidence) -> None:
         self.reingestions.append((identity, evidence))
@@ -219,6 +236,41 @@ def test_case_a_and_c_are_idempotent_reingestion(ingestion: IngestionFixture) ->
     assert len(ingestion.records.reingestions) == 1
 
 
+@pytest.mark.parametrize("same_evidence", [True, False])
+def test_lost_identity_registration_race_uses_winner_outcome(same_evidence: bool) -> None:
+    incoming = XmlEvidence.from_original_xml(OriginalXml(cfdi_xml()))
+    winner_evidence = (
+        incoming
+        if same_evidence
+        else XmlEvidence.from_original_xml(
+            OriginalXml(cfdi_xml().replace(b"<cfdi:Complemento>", b"<cfdi:Complemento> "))
+        )
+    )
+    winner = CfdiIdentity(CfdiUuid.from_raw(VALID_UUID), winner_evidence)
+
+    class LostRaceRepository(InMemoryIdentityRepository):
+        def get_by_uuid(self, cfdi_uuid: CfdiUuid) -> CfdiIdentity | None:
+            return None
+
+        def register(self, identity: CfdiIdentity) -> IdentityRegistration:
+            return IdentityRegistration(identity=winner, created=False)
+
+    records = InMemoryIngestionRecords()
+    use_case = IngestCfdiXml(
+        SecureCfdiIdentityReader(),
+        InMemoryEvidenceStore(),
+        LostRaceRepository(),
+        records,
+        InMemoryUnitOfWork(),
+    )
+    result = use_case.ingest_cfdi_xml(cfdi_xml())
+
+    expected = IngestionOutcome.REINGESTED if same_evidence else IngestionOutcome.IDENTITY_CONFLICT
+    assert result.outcome is expected
+    assert len(records.reingestions) == int(same_evidence)
+    assert len(records.conflicts) == int(not same_evidence)
+
+
 def test_case_b_preserves_conflict_without_replacing_evidence(ingestion: IngestionFixture) -> None:
     use_case = ingestion.create_use_case()
     accepted = use_case.ingest_cfdi_xml(cfdi_xml())
@@ -291,8 +343,11 @@ def test_case_d_raises_evidence_identity_mismatch(ingestion: IngestionFixture) -
 
 def test_evidence_storage_failure_is_not_silently_wrapped() -> None:
     class FailingEvidenceStore:
-        def store(self, evidence: XmlEvidence) -> None:
+        def store(self, evidence: XmlEvidence, extracted_uuid: CfdiUuid) -> None:
             raise EvidenceStorageFailure("simulated storage failure")
+
+        def get_by_digest(self, digest: Sha256Digest) -> CfdiUuid | None:
+            return None
 
     use_case = IngestCfdiXml(
         reader=SecureCfdiIdentityReader(),
@@ -304,3 +359,6 @@ def test_evidence_storage_failure_is_not_silently_wrapped() -> None:
 
     with pytest.raises(EvidenceStorageFailure):
         use_case.ingest_cfdi_xml(cfdi_xml())
+
+    def record_accepted(self, identity: CfdiIdentity, evidence: XmlEvidence) -> None:
+        self.accepted.append((identity, evidence))

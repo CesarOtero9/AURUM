@@ -352,13 +352,13 @@ The first vertical slice is implemented according to the approved implementation
 The specification defines immutable evidence, SHA-256, and identity extraction only from
 the `UUID` attribute of `{http://www.sat.gob.mx/TimbreFiscalDigital}TimbreFiscalDigital`,
 as well as canonical UUIDs, duplicate/conflict policy, ports, invariants, transaction
-boundary, and required tests. The implementation has no production persistence adapter
-or HTTP endpoint.
+boundary, and required tests. The implementation has no HTTP endpoint.
 
-The minimum production persistence design is proposed and under review in
-`CFDI_IDENTITY_PERSISTENCE_SPEC.md`. It specifies PostgreSQL `BYTEA` evidence storage,
-identity/evidence constraints, conflict and provenance records, transactions, and
-concurrency safeguards. No persistence implementation exists yet.
+The accepted minimum production persistence design in
+`CFDI_IDENTITY_PERSISTENCE_SPEC.md` is implemented with PostgreSQL `BYTEA` evidence
+storage, identity/evidence constraints, conflict and provenance records, and
+transactions. Real PostgreSQL integration validation remains pending a configured
+`AURUM_DATABASE_URL`.
 
 ---
 

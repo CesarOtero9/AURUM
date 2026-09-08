@@ -1,6 +1,6 @@
 # AURUM — CFDI Identity & Immutable Ingestion Persistence Specification
 
-**Status:** Proposed design — pending review
+**Status:** Accepted
 **Scope:** Production persistence for CFDI identity and immutable XML evidence
 
 ---
