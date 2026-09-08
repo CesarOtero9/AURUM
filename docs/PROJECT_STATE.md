@@ -357,8 +357,12 @@ boundary, and required tests. The implementation has no HTTP endpoint.
 The accepted minimum production persistence design in
 `CFDI_IDENTITY_PERSISTENCE_SPEC.md` is implemented with PostgreSQL `BYTEA` evidence
 storage, identity/evidence constraints, conflict and provenance records, and
-transactions. Real PostgreSQL integration validation remains pending a configured
-`AURUM_DATABASE_URL`.
+transactions. Persistence implementation is complete; PostgreSQL 17 real integration
+validation completed successfully: the complete backend suite has 49 passing tests,
+including 18 PostgreSQL integration tests.
+
+The `CFDI Header / Fiscal Core` parsing design is accepted; implementation has not
+started.
 
 ---
 
