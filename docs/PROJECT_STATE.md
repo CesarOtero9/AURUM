@@ -361,8 +361,8 @@ transactions. Persistence implementation is complete; PostgreSQL 17 real integra
 validation completed successfully: the complete backend suite has 49 passing tests,
 including 18 PostgreSQL integration tests.
 
-The `CFDI Header / Fiscal Core` parsing design is accepted; implementation has not
-started.
+The `CFDI Header / Fiscal Core` domain and parser are implemented and
+unit-validated; header persistence implementation is pending.
 
 The `CFDI Header / Fiscal Core` persistence design is accepted; implementation has not
 started.
