@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -13,6 +13,15 @@ from aurum.application.cfdi_ingestion import (
     IdentityRegistration,
     IngestionRecordRepository,
     XmlEvidenceStore,
+)
+from aurum.domain.cfdi_header import (
+    PARSER_NAME,
+    PARSER_VERSION,
+    CfdiFiscalHeader,
+    DerivedResultDeterminismViolation,
+    HeaderPromotionError,
+    ParserFingerprintSchemaMismatch,
+    fingerprint,
 )
 from aurum.domain.cfdi_identity import (
     CfdiIdentity,
@@ -25,12 +34,28 @@ from aurum.domain.cfdi_identity import (
     XmlEvidence,
 )
 from aurum.infrastructure.persistence_models import (
+    CfdiHeaderCurrentModel,
+    CfdiHeaderParseExecutionModel,
+    CfdiHeaderParserSchemaModel,
+    CfdiHeaderResultModel,
     CfdiIdentityModel,
     IdentityConflictModel,
     IngestionRecordModel,
     XmlEvidenceModel,
 )
 from aurum.infrastructure.sqlalchemy_uow import SqlAlchemyUnitOfWork
+
+
+def _after_missing_parser_schema() -> None:
+    """Private no-op seam for deterministic persistence race tests."""
+
+
+def _after_missing_header_result() -> None:
+    """Private no-op seam for deterministic persistence race tests."""
+
+
+def _after_identity_locked() -> None:
+    """Private no-op seam for deterministic promotion-lock tests."""
 
 
 def _uuid(value: CfdiUuid) -> UUID:
@@ -194,5 +219,187 @@ class SqlAlchemyIngestionRecordRepository(IngestionRecordRepository):
                 cfdi_identity_id=identity_row.id,
                 authoritative_evidence_id=identity_row.authoritative_evidence_id,
                 identity_conflict_id=incident.id,
+            )
+        )
+
+
+class SqlAlchemyCfdiHeaderRepository:
+    """Append-only header result/execution persistence within an active UoW."""
+
+    def __init__(self, unit_of_work: SqlAlchemyUnitOfWork) -> None:
+        self._unit_of_work = unit_of_work
+
+    def record_success(
+        self,
+        evidence_id: int,
+        header: CfdiFiscalHeader,
+        configuration_hash: str,
+        implementation_id: str | None = None,
+    ) -> CfdiHeaderResultModel:
+        session = self._unit_of_work.require_session()
+        schema, digest = fingerprint(header)
+        parser_schema = session.scalar(
+            select(CfdiHeaderParserSchemaModel).where(
+                CfdiHeaderParserSchemaModel.parser_name == PARSER_NAME,
+                CfdiHeaderParserSchemaModel.parser_version == PARSER_VERSION,
+            )
+        )
+        if parser_schema is None:
+            _after_missing_parser_schema()
+            try:
+                with session.begin_nested():
+                    session.add(
+                        CfdiHeaderParserSchemaModel(
+                            parser_name=PARSER_NAME,
+                            parser_version=PARSER_VERSION,
+                            result_fingerprint_schema=schema,
+                        )
+                    )
+                    session.flush()
+            except IntegrityError:
+                parser_schema = session.scalar(
+                    select(CfdiHeaderParserSchemaModel).where(
+                        CfdiHeaderParserSchemaModel.parser_name == PARSER_NAME,
+                        CfdiHeaderParserSchemaModel.parser_version == PARSER_VERSION,
+                    )
+                )
+        if parser_schema is not None and parser_schema.result_fingerprint_schema != schema:
+            raise ParserFingerprintSchemaMismatch("Fingerprint schema changed for parser identity")
+        existing = session.scalar(
+            select(CfdiHeaderResultModel).where(
+                CfdiHeaderResultModel.evidence_id == evidence_id,
+                CfdiHeaderResultModel.parser_name == PARSER_NAME,
+                CfdiHeaderResultModel.parser_version == PARSER_VERSION,
+                CfdiHeaderResultModel.configuration_hash == configuration_hash,
+            )
+        )
+        if existing is not None:
+            if existing.result_fingerprint_schema != schema:
+                raise ParserFingerprintSchemaMismatch(
+                    "Fingerprint schema changed for parser identity"
+                )
+            if existing.result_fingerprint != digest:
+                raise DerivedResultDeterminismViolation(
+                    "Fingerprint changed for logical result identity"
+                )
+            result = existing
+        else:
+            _after_missing_header_result()
+            c, issuer, receiver = header.comprobante, header.issuer, header.receiver
+            result = CfdiHeaderResultModel(
+                evidence_id=evidence_id,
+                parser_name=PARSER_NAME,
+                parser_version=PARSER_VERSION,
+                configuration_hash=configuration_hash,
+                result_fingerprint_schema=schema,
+                result_fingerprint=digest,
+                cfdi_schema_version=header.version.value,
+                fecha_source=c.fecha.source,
+                fecha=c.fecha.value,
+                tipo_comprobante=c.tipo_comprobante,
+                serie_source=c.serie,
+                folio_source=c.folio,
+                moneda=c.moneda,
+                tipo_cambio_source=None if c.tipo_cambio is None else c.tipo_cambio.source,
+                tipo_cambio=None if c.tipo_cambio is None else c.tipo_cambio.value,
+                subtotal_source=c.subtotal.source,
+                subtotal=c.subtotal.value,
+                descuento_source=None if c.descuento is None else c.descuento.source,
+                descuento=None if c.descuento is None else c.descuento.value,
+                total_source=c.total.source,
+                total=c.total.value,
+                exportacion=c.exportacion,
+                lugar_expedicion=c.lugar_expedicion,
+                metodo_pago=c.metodo_pago,
+                forma_pago=c.forma_pago,
+                condiciones_pago_source=c.condiciones_pago,
+                confirmacion_source=c.confirmacion,
+                issuer_rfc_source=issuer.rfc.source,
+                issuer_rfc_canonical=issuer.rfc.canonical,
+                issuer_nombre_source=issuer.nombre,
+                issuer_regimen_fiscal=issuer.regimen_fiscal,
+                receiver_rfc_source=receiver.rfc.source,
+                receiver_rfc_canonical=receiver.rfc.canonical,
+                receiver_nombre_source=receiver.nombre,
+                domicilio_fiscal_receptor=receiver.domicilio_fiscal_receptor,
+                regimen_fiscal_receptor=receiver.regimen_fiscal_receptor,
+                uso_cfdi=receiver.uso_cfdi,
+            )
+            try:
+                with session.begin_nested():
+                    session.add(result)
+                    session.flush()
+            except IntegrityError:
+                winner = session.scalar(
+                    select(CfdiHeaderResultModel).where(
+                        CfdiHeaderResultModel.evidence_id == evidence_id,
+                        CfdiHeaderResultModel.parser_name == PARSER_NAME,
+                        CfdiHeaderResultModel.parser_version == PARSER_VERSION,
+                        CfdiHeaderResultModel.configuration_hash == configuration_hash,
+                    )
+                )
+                if winner is None:
+                    raise
+                if winner.result_fingerprint_schema != schema:
+                    raise ParserFingerprintSchemaMismatch(
+                        "Fingerprint schema changed for parser identity"
+                    )
+                if winner.result_fingerprint != digest:
+                    raise DerivedResultDeterminismViolation(
+                        "Fingerprint changed for logical result identity"
+                    )
+                result = winner
+        session.add(
+            CfdiHeaderParseExecutionModel(
+                evidence_id=evidence_id,
+                parser_name=PARSER_NAME,
+                parser_version=PARSER_VERSION,
+                configuration_hash=configuration_hash,
+                status="SUCCEEDED",
+                result_id=result.id,
+                implementation_id=implementation_id,
+            )
+        )
+        return result
+
+    def record_failure(self, evidence_id: int, configuration_hash: str, error: Exception) -> None:
+        self._unit_of_work.require_session().add(
+            CfdiHeaderParseExecutionModel(
+                evidence_id=evidence_id,
+                parser_name=PARSER_NAME,
+                parser_version=PARSER_VERSION,
+                configuration_hash=configuration_hash,
+                status="FAILED",
+                error_code=type(error).__name__,
+                error_type=type(error).__name__,
+                error_message=str(error),
+            )
+        )
+
+    def promote(self, identity_id: int, result_id: int) -> None:
+        session = self._unit_of_work.require_session()
+        identity = session.scalar(
+            select(CfdiIdentityModel).where(CfdiIdentityModel.id == identity_id).with_for_update()
+        )
+        _after_identity_locked()
+        result = session.get(CfdiHeaderResultModel, result_id)
+        if (
+            identity is None
+            or result is None
+            or result.evidence_id != identity.authoritative_evidence_id
+        ):
+            raise HeaderPromotionError("Result is not derived from authoritative identity evidence")
+        session.execute(
+            insert(CfdiHeaderCurrentModel)
+            .values(
+                cfdi_identity_id=identity.id, evidence_id=result.evidence_id, result_id=result.id
+            )
+            .on_conflict_do_update(
+                index_elements=["cfdi_identity_id"],
+                set_={
+                    "evidence_id": result.evidence_id,
+                    "result_id": result.id,
+                    "promoted_at": func.now(),
+                },
             )
         )

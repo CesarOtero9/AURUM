@@ -64,6 +64,18 @@ class InvalidRfc(CfdiHeaderError):
     pass
 
 
+class DerivedResultDeterminismViolation(CfdiHeaderError):
+    pass
+
+
+class ParserFingerprintSchemaMismatch(CfdiHeaderError):
+    pass
+
+
+class HeaderPromotionError(CfdiHeaderError):
+    pass
+
+
 class CfdiVersion(StrEnum):
     CFDI_33 = "3.3"
     CFDI_40 = "4.0"

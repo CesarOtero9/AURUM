@@ -13,10 +13,11 @@
 AURUM has a documented product and architectural foundation, plus an initial backend
 bootstrap. The bootstrap uses Python 3.12, a `src` package layout, FastAPI, and pytest.
 
-It exposes only the technical health endpoint (`GET /health`). The first fiscal slice,
-CFDI Identity & Immutable Ingestion, is implemented as domain/application logic with a
-secure XML reader and in-memory test adapters. No database, authentication, worker, or
-other fiscal/accounting capability has been implemented.
+It exposes only the technical health endpoint (`GET /health`). The CFDI Identity &
+Immutable Ingestion and CFDI Header / Fiscal Core slices are implemented. Header
+Persistence is accepted with immutable derived results, parse-execution history, and an
+explicit current projection. No authentication, worker, or other fiscal/accounting
+capability has been implemented.
 
 The package follows the agreed modular-monolith boundaries: `domain`, `application`,
 `infrastructure`, and `api`. Quality checks include strict pytest configuration and Ruff
@@ -361,11 +362,14 @@ transactions. Persistence implementation is complete; PostgreSQL 17 real integra
 validation completed successfully: the complete backend suite has 49 passing tests,
 including 18 PostgreSQL integration tests.
 
-The `CFDI Header / Fiscal Core` domain and parser are implemented and
-unit-validated; header persistence implementation is pending.
+The `CFDI Header / Fiscal Core` domain, parser, and accepted persistence design are
+implemented. Header Persistence migration `20260909_01` was validated on the dedicated
+PostgreSQL test database: 45 Header persistence tests, 18 Identity regression tests, and
+63 combined persistence tests passed. The full backend gate passed with 213 tests.
+Final acceptance: **ACCEPTED**.
 
-The `CFDI Header / Fiscal Core` persistence design is accepted; implementation has not
-started.
+Identity + Header are closed. The next fiscal/accounting increment remains pending;
+Concepts, SIF, and Reconciliation are not implemented by this milestone.
 
 ---
 

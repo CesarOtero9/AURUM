@@ -82,8 +82,9 @@ def engine(migrated_database: str):
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE ingestion_record, identity_conflict, cfdi_identity, "
-                "xml_evidence RESTART IDENTITY"
+                "TRUNCATE cfdi_header_current, cfdi_header_parse_execution, "
+                "cfdi_header_result, cfdi_header_parser_schema, ingestion_record, "
+                "identity_conflict, cfdi_identity, xml_evidence RESTART IDENTITY CASCADE"
             )
         )
     yield engine
@@ -148,7 +149,7 @@ def test_alembic_upgrade_from_empty_database(migrated_database: str) -> None:
         with engine.connect() as connection:
             assert (
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "20260908_01"
+                == "20260909_01"
             )
     finally:
         engine.dispose()
