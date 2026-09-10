@@ -371,6 +371,11 @@ Final acceptance: **ACCEPTED**.
 Identity + Header are closed. The next fiscal/accounting increment remains pending;
 Concepts, SIF, and Reconciliation are not implemented by this milestone.
 
+The Policy Identity architecture/design is accepted. Implementation has not started, and
+the candidate persistence tuple/UNIQUE constraints are intentionally not frozen.
+Representative Reporte de Mayor and Reporte XML SIF evidence must be reviewed in the
+mandatory source-evidence gate before Policy Identity implementation or migration design.
+
 ---
 
 # 8. Near-term documents
