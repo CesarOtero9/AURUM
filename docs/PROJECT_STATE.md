@@ -375,8 +375,15 @@ and absent/version-forbidden in 3.3. The Concepts parser implementation is accep
 preserves zero-based source order and duplicate rows, reuses established secure
 XML/version/namespace behavior, and uses typed fiscal errors. Catalogue membership and
 advanced lexical code validation remain deferred. Concept-level taxes and aggregate taxes
-remain separate future slices. Concepts persistence has not started; the next checkpoint is
-CFDI Concepts Persistence Design.
+remain separate future slices. `CFDI_CONCEPTS_PERSISTENCE_SPEC.md` is the accepted Concepts
+persistence contract. It defines `cfdi_concepts_parser_schema`, `cfdi_concepts_result`,
+`cfdi_concept`, `cfdi_concepts_parse_execution`, and `cfdi_concepts_current`; ordered
+zero-based child identity, duplicate preservation, persisted/validated `concept_count`, raw
+lexical plus exact PostgreSQL NUMERIC semantics, idempotent registration, preserved
+reprocessing history, explicit Header-style current promotion, and PostgreSQL uniqueness plus
+nested-savepoint concurrency recovery. Future concept taxes attach to immutable
+`cfdi_concept.id`; tax persistence is not part of this milestone. Concepts persistence
+implementation has not started; the next checkpoint is CFDI Concepts Persistence Implementation.
 
 SIF and Reconciliation are not implemented by this milestone.
 
