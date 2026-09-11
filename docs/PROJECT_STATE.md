@@ -387,18 +387,24 @@ PostgreSQL validation passed: 28 Concepts tests, 18 Identity regression tests, 4
 regression tests, and 91 combined persistence tests; the full backend gate passed with 288
 tests.
 
-`CFDI_TAXES_SPEC.md` is the accepted canonical CFDI Taxes parsing/domain contract; parser
-and persistence implementation have not started. It separates concept-level from
-comprobante-level aggregate taxes, and Traslados from Retenciones. In particular, CFDI 3.3
+`CFDI_TAXES_SPEC.md` is the accepted canonical CFDI Taxes parsing/domain contract. The Taxes
+parser implementation is accepted for CFDI 3.3 and 4.0. It keeps concept-level from
+comprobante-level aggregate taxes, and Traslados from Retenciones. CFDI 3.3
 aggregate Traslado has no `Base`, CFDI 4.0 aggregate Traslado has `Base`, and aggregate
 Retencion in both versions has exactly `Impuesto` and `Importe`. Tax rows preserve raw lexical
-values plus exact Decimal semantics, source order, and duplicates. `ObjetoImp` remains a
-source fact: structural parsing, versioned fiscal validation, and SAT catalogue policy are
+plus exact Decimal values, source order, duplicates, and deterministic fingerprints following
+the Header/Concepts convention (`FINGERPRINT_SCHEMA` is separate from the hashed payload).
+`ObjetoImp` is a source fact and does not fabricate or reject tax rows. Structural parsing,
+versioned fiscal validation, and SAT catalogue policy are separate. Retencion
+`TipoFactor="Exento"` is preserved as a source fact for future versioned fiscal validation;
+the structural SAT/XSD factor enum is `Tasa`, `Cuota`, and `Exento`. The parser reuses exact
+namespace/version and secure XML constraints. Validation passed: 90 Taxes tests, 47 Concepts
+tests, 119 Header tests, 27 ingestion tests, and 378 full-backend tests. Taxes persistence,
+arithmetic validation, fiscal cross-node validation, and SAT catalogue infrastructure have not
+started. Future concept-tax persistence attaches to immutable `cfdi_concept.id`. The next
+checkpoint is CFDI Taxes Persistence Design. Current ObjetoImp structural parsing, versioned
+fiscal validation, and SAT catalogue policy remain
 separate; no obsolete 01–04 closure is accepted, and current official evidence covers 05–08.
-Accounting/deductibility/creditability, payroll/honorarios/DIOT/policy inference, arithmetic
-validation, and SAT catalogue infrastructure remain outside the parser. Future concept-tax
-persistence attaches to immutable `cfdi_concept.id`. The next checkpoint is CFDI Taxes Parser
-Implementation.
 
 SIF and Reconciliation are not implemented by this milestone.
 
