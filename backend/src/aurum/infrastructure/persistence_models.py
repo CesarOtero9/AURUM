@@ -303,3 +303,152 @@ class CfdiHeaderCurrentModel(Base):
     promoted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class CfdiConceptsParserSchemaModel(Base):
+    __tablename__ = "cfdi_concepts_parser_schema"
+    __table_args__ = (
+        UniqueConstraint("parser_name", "parser_version"),
+        UniqueConstraint("parser_name", "parser_version", "result_fingerprint_schema"),
+        CheckConstraint("length(result_fingerprint_schema) > 0"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    parser_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    result_fingerprint_schema: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class CfdiConceptsResultModel(Base):
+    __tablename__ = "cfdi_concepts_result"
+    __table_args__ = (
+        UniqueConstraint("evidence_id", "parser_name", "parser_version", "configuration_hash"),
+        UniqueConstraint("id", "evidence_id"),
+        UniqueConstraint(
+            "id", "evidence_id", "parser_name", "parser_version", "configuration_hash"
+        ),
+        ForeignKeyConstraint(["evidence_id"], ["xml_evidence.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["parser_name", "parser_version", "result_fingerprint_schema"],
+            [
+                "cfdi_concepts_parser_schema.parser_name",
+                "cfdi_concepts_parser_schema.parser_version",
+                "cfdi_concepts_parser_schema.result_fingerprint_schema",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("configuration_hash ~ '^[0-9a-f]{64}$'"),
+        CheckConstraint("result_fingerprint ~ '^[0-9a-f]{64}$'"),
+        CheckConstraint("cfdi_version IN ('3.3', '4.0')"),
+        CheckConstraint("concept_count > 0"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    evidence_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    parser_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    configuration_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    cfdi_version: Mapped[str] = mapped_column(String(3), nullable=False)
+    concept_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_fingerprint_schema: Mapped[str] = mapped_column(String(100), nullable=False)
+    result_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CfdiConceptModel(Base):
+    __tablename__ = "cfdi_concept"
+    __table_args__ = (
+        UniqueConstraint("result_id", "concept_index"),
+        ForeignKeyConstraint(["result_id"], ["cfdi_concepts_result.id"], ondelete="RESTRICT"),
+        CheckConstraint("concept_index >= 0"),
+        CheckConstraint("(descuento_raw IS NULL) = (descuento IS NULL)"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    result_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    concept_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    clave_prod_serv_raw: Mapped[str] = mapped_column(String, nullable=False)
+    no_identificacion_raw: Mapped[str | None] = mapped_column(String)
+    cantidad_raw: Mapped[str] = mapped_column(String, nullable=False)
+    cantidad: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    clave_unidad_raw: Mapped[str] = mapped_column(String, nullable=False)
+    unidad_raw: Mapped[str | None] = mapped_column(String)
+    descripcion_raw: Mapped[str] = mapped_column(Text, nullable=False)
+    valor_unitario_raw: Mapped[str] = mapped_column(String, nullable=False)
+    valor_unitario: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    importe_raw: Mapped[str] = mapped_column(String, nullable=False)
+    importe: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    descuento_raw: Mapped[str | None] = mapped_column(String)
+    descuento: Mapped[Decimal | None] = mapped_column(Numeric)
+    objeto_imp_raw: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CfdiConceptsParseExecutionModel(Base):
+    __tablename__ = "cfdi_concepts_parse_execution"
+    __table_args__ = (
+        Index("ix_cfdi_concepts_execution_evidence_parsed", "evidence_id", text("parsed_at DESC")),
+        Index("ix_cfdi_concepts_execution_parser", "parser_name", "parser_version"),
+        Index(
+            "ix_cfdi_concepts_execution_failed",
+            "parsed_at",
+            postgresql_where=text("status = 'FAILED'"),
+        ),
+        ForeignKeyConstraint(["evidence_id"], ["xml_evidence.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["result_id", "evidence_id", "parser_name", "parser_version", "configuration_hash"],
+            [
+                "cfdi_concepts_result.id",
+                "cfdi_concepts_result.evidence_id",
+                "cfdi_concepts_result.parser_name",
+                "cfdi_concepts_result.parser_version",
+                "cfdi_concepts_result.configuration_hash",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("status IN ('SUCCEEDED', 'FAILED')"),
+        CheckConstraint("configuration_hash ~ '^[0-9a-f]{64}$'"),
+        CheckConstraint(
+            "(status = 'SUCCEEDED' AND result_id IS NOT NULL AND error_code IS NULL "
+            "AND error_type IS NULL AND error_message IS NULL) OR "
+            "(status = 'FAILED' AND result_id IS NULL AND error_code IS NOT NULL "
+            "AND error_type IS NOT NULL)"
+        ),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    evidence_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    parser_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    configuration_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    result_id: Mapped[int | None] = mapped_column(BigInteger)
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    error_type: Mapped[str | None] = mapped_column(String(200))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    implementation_id: Mapped[str | None] = mapped_column(String(100))
+    parsed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CfdiConceptsCurrentModel(Base):
+    __tablename__ = "cfdi_concepts_current"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["cfdi_identity_id", "evidence_id"],
+            ["cfdi_identity.id", "cfdi_identity.authoritative_evidence_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["result_id", "evidence_id"],
+            ["cfdi_concepts_result.id", "cfdi_concepts_result.evidence_id"],
+            ondelete="RESTRICT",
+        ),
+    )
+    cfdi_identity_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    evidence_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    result_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
+    promoted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

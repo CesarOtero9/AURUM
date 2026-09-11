@@ -14,6 +14,18 @@ from aurum.application.cfdi_ingestion import (
     IngestionRecordRepository,
     XmlEvidenceStore,
 )
+from aurum.domain.cfdi_concepts import (
+    PARSER_NAME as CONCEPTS_PARSER_NAME,
+)
+from aurum.domain.cfdi_concepts import (
+    PARSER_VERSION as CONCEPTS_PARSER_VERSION,
+)
+from aurum.domain.cfdi_concepts import (
+    ParsedCfdiConcepts,
+)
+from aurum.domain.cfdi_concepts import (
+    fingerprint as concepts_fingerprint,
+)
 from aurum.domain.cfdi_header import (
     PARSER_NAME,
     PARSER_VERSION,
@@ -34,6 +46,11 @@ from aurum.domain.cfdi_identity import (
     XmlEvidence,
 )
 from aurum.infrastructure.persistence_models import (
+    CfdiConceptModel,
+    CfdiConceptsCurrentModel,
+    CfdiConceptsParseExecutionModel,
+    CfdiConceptsParserSchemaModel,
+    CfdiConceptsResultModel,
     CfdiHeaderCurrentModel,
     CfdiHeaderParseExecutionModel,
     CfdiHeaderParserSchemaModel,
@@ -52,6 +69,14 @@ def _after_missing_parser_schema() -> None:
 
 def _after_missing_header_result() -> None:
     """Private no-op seam for deterministic persistence race tests."""
+
+
+def _after_missing_concepts_parser_schema() -> None:
+    """Private no-op seam for deterministic Concepts persistence race tests."""
+
+
+def _after_missing_concepts_result() -> None:
+    """Private no-op seam for deterministic Concepts persistence race tests."""
 
 
 def _after_identity_locked() -> None:
@@ -403,3 +428,199 @@ class SqlAlchemyCfdiHeaderRepository:
                 },
             )
         )
+
+
+class SqlAlchemyCfdiConceptsRepository:
+    """Append-only Concepts result/execution persistence within an active UoW."""
+
+    def __init__(self, unit_of_work: SqlAlchemyUnitOfWork) -> None:
+        self._unit_of_work = unit_of_work
+
+    def record_success(
+        self,
+        evidence_id: int,
+        concepts: ParsedCfdiConcepts,
+        configuration_hash: str,
+        implementation_id: str | None = None,
+    ) -> CfdiConceptsResultModel:
+        self._validate(concepts)
+        session = self._unit_of_work.require_session()
+        schema, digest = concepts_fingerprint(concepts)
+        parser_schema = session.scalar(
+            select(CfdiConceptsParserSchemaModel).where(
+                CfdiConceptsParserSchemaModel.parser_name == CONCEPTS_PARSER_NAME,
+                CfdiConceptsParserSchemaModel.parser_version == CONCEPTS_PARSER_VERSION,
+            )
+        )
+        if parser_schema is None:
+            _after_missing_concepts_parser_schema()
+            try:
+                with session.begin_nested():
+                    session.add(
+                        CfdiConceptsParserSchemaModel(
+                            parser_name=CONCEPTS_PARSER_NAME,
+                            parser_version=CONCEPTS_PARSER_VERSION,
+                            result_fingerprint_schema=schema,
+                        )
+                    )
+                    session.flush()
+            except IntegrityError:
+                parser_schema = session.scalar(
+                    select(CfdiConceptsParserSchemaModel).where(
+                        CfdiConceptsParserSchemaModel.parser_name == CONCEPTS_PARSER_NAME,
+                        CfdiConceptsParserSchemaModel.parser_version == CONCEPTS_PARSER_VERSION,
+                    )
+                )
+        if parser_schema is not None and parser_schema.result_fingerprint_schema != schema:
+            raise ParserFingerprintSchemaMismatch("Fingerprint schema changed for parser identity")
+        existing = session.scalar(
+            select(CfdiConceptsResultModel).where(
+                CfdiConceptsResultModel.evidence_id == evidence_id,
+                CfdiConceptsResultModel.parser_name == CONCEPTS_PARSER_NAME,
+                CfdiConceptsResultModel.parser_version == CONCEPTS_PARSER_VERSION,
+                CfdiConceptsResultModel.configuration_hash == configuration_hash,
+            )
+        )
+        if existing is not None:
+            if existing.result_fingerprint_schema != schema:
+                raise ParserFingerprintSchemaMismatch(
+                    "Fingerprint schema changed for parser identity"
+                )
+            if existing.result_fingerprint != digest:
+                raise DerivedResultDeterminismViolation(
+                    "Fingerprint changed for logical result identity"
+                )
+            result = existing
+        else:
+            _after_missing_concepts_result()
+            result = CfdiConceptsResultModel(
+                evidence_id=evidence_id,
+                parser_name=CONCEPTS_PARSER_NAME,
+                parser_version=CONCEPTS_PARSER_VERSION,
+                configuration_hash=configuration_hash,
+                cfdi_version=concepts.version.value,
+                concept_count=len(concepts.concepts),
+                result_fingerprint_schema=schema,
+                result_fingerprint=digest,
+            )
+            try:
+                with session.begin_nested():
+                    session.add(result)
+                    session.flush()
+                    session.add_all(
+                        [
+                            CfdiConceptModel(
+                                result_id=result.id,
+                                concept_index=item.concept_index,
+                                clave_prod_serv_raw=item.clave_prod_serv_raw,
+                                no_identificacion_raw=item.no_identificacion_raw,
+                                cantidad_raw=item.cantidad_raw,
+                                cantidad=item.cantidad,
+                                clave_unidad_raw=item.clave_unidad_raw,
+                                unidad_raw=item.unidad_raw,
+                                descripcion_raw=item.descripcion_raw,
+                                valor_unitario_raw=item.valor_unitario_raw,
+                                valor_unitario=item.valor_unitario,
+                                importe_raw=item.importe_raw,
+                                importe=item.importe,
+                                descuento_raw=item.descuento_raw,
+                                descuento=item.descuento,
+                                objeto_imp_raw=item.objeto_imp_raw,
+                            )
+                            for item in concepts.concepts
+                        ]
+                    )
+                    session.flush()
+            except IntegrityError:
+                winner = session.scalar(
+                    select(CfdiConceptsResultModel).where(
+                        CfdiConceptsResultModel.evidence_id == evidence_id,
+                        CfdiConceptsResultModel.parser_name == CONCEPTS_PARSER_NAME,
+                        CfdiConceptsResultModel.parser_version == CONCEPTS_PARSER_VERSION,
+                        CfdiConceptsResultModel.configuration_hash == configuration_hash,
+                    )
+                )
+                if winner is None:
+                    raise
+                if winner.result_fingerprint_schema != schema:
+                    raise ParserFingerprintSchemaMismatch(
+                        "Fingerprint schema changed for parser identity"
+                    )
+                if winner.result_fingerprint != digest:
+                    raise DerivedResultDeterminismViolation(
+                        "Fingerprint changed for logical result identity"
+                    )
+                result = winner
+        session.add(
+            CfdiConceptsParseExecutionModel(
+                evidence_id=evidence_id,
+                parser_name=CONCEPTS_PARSER_NAME,
+                parser_version=CONCEPTS_PARSER_VERSION,
+                configuration_hash=configuration_hash,
+                status="SUCCEEDED",
+                result_id=result.id,
+                implementation_id=implementation_id,
+            )
+        )
+        return result
+
+    def record_failure(self, evidence_id: int, configuration_hash: str, error: Exception) -> None:
+        self._unit_of_work.require_session().add(
+            CfdiConceptsParseExecutionModel(
+                evidence_id=evidence_id,
+                parser_name=CONCEPTS_PARSER_NAME,
+                parser_version=CONCEPTS_PARSER_VERSION,
+                configuration_hash=configuration_hash,
+                status="FAILED",
+                error_code=type(error).__name__,
+                error_type=type(error).__name__,
+                error_message=str(error),
+            )
+        )
+
+    def get_current(self, identity_id: int) -> CfdiConceptsCurrentModel | None:
+        return self._unit_of_work.require_session().get(CfdiConceptsCurrentModel, identity_id)
+
+    def promote(self, identity_id: int, result_id: int) -> None:
+        session = self._unit_of_work.require_session()
+        identity = session.scalar(
+            select(CfdiIdentityModel).where(CfdiIdentityModel.id == identity_id).with_for_update()
+        )
+        _after_identity_locked()
+        result = session.get(CfdiConceptsResultModel, result_id)
+        if (
+            identity is None
+            or result is None
+            or result.evidence_id != identity.authoritative_evidence_id
+        ):
+            raise HeaderPromotionError("Result is not derived from authoritative identity evidence")
+        session.execute(
+            insert(CfdiConceptsCurrentModel)
+            .values(
+                cfdi_identity_id=identity.id, evidence_id=result.evidence_id, result_id=result.id
+            )
+            .on_conflict_do_update(
+                index_elements=["cfdi_identity_id"],
+                set_={
+                    "evidence_id": result.evidence_id,
+                    "result_id": result.id,
+                    "promoted_at": func.now(),
+                },
+            )
+        )
+
+    @staticmethod
+    def _validate(concepts: ParsedCfdiConcepts) -> None:
+        if not concepts.concepts:
+            raise ValueError("Concepts result must contain at least one concept")
+        if [item.concept_index for item in concepts.concepts] != list(
+            range(len(concepts.concepts))
+        ):
+            raise ValueError("Concept indexes must be contiguous and zero-based")
+        for item in concepts.concepts:
+            if (item.descuento_raw is None) != (item.descuento is None):
+                raise ValueError("Discount raw and parsed values must be paired")
+            if concepts.version.value == "3.3" and item.objeto_imp_raw is not None:
+                raise ValueError("CFDI 3.3 concepts cannot contain ObjetoImp")
+            if concepts.version.value == "4.0" and item.objeto_imp_raw is None:
+                raise ValueError("CFDI 4.0 concepts require ObjetoImp")

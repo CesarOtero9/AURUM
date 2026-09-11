@@ -149,7 +149,7 @@ def test_alembic_upgrade_from_empty_database(migrated_database: str) -> None:
         with engine.connect() as connection:
             assert (
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "20260909_01"
+                == "20260910_01"
             )
     finally:
         engine.dispose()
