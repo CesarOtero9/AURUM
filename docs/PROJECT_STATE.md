@@ -371,10 +371,13 @@ Final acceptance: **ACCEPTED**.
 Identity + Header are closed. The next fiscal/accounting increment remains pending;
 Concepts, SIF, and Reconciliation are not implemented by this milestone.
 
-The Policy Identity architecture/design is accepted. Implementation has not started, and
-the candidate persistence tuple/UNIQUE constraints are intentionally not frozen.
-Representative Reporte de Mayor and Reporte XML SIF evidence must be reviewed in the
-mandatory source-evidence gate before Policy Identity implementation or migration design.
+The Policy Identity architecture/design is accepted, and the source-evidence review has
+materially advanced through `ACCOUNTING_SOURCE_EVIDENCE.md`. PolicyIdentitySchema v1 is
+accepted for domain design; persistence implementation has not started, and its candidate
+tuple/UNIQUE constraints remain intentionally unfrozen. Policy Identity persistence design may
+proceed once the remaining identity-scope questions in `ACCOUNTING_SOURCE_EVIDENCE.md` are
+resolved. Normative accounting research remains an explicit gate before accounting-semantic
+automation is finalized.
 
 ---
 
