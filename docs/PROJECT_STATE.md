@@ -368,8 +368,14 @@ PostgreSQL test database: 45 Header persistence tests, 18 Identity regression te
 63 combined persistence tests passed. The full backend gate passed with 213 tests.
 Final acceptance: **ACCEPTED**.
 
-Identity + Header are closed. The next fiscal/accounting increment remains pending;
-Concepts, SIF, and Reconciliation are not implemented by this milestone.
+Identity + Header are closed. `CFDI_CONCEPTS_SPEC.md` is the accepted CFDI Concepts
+parsing/domain contract: it documents CFDI 3.3/4.0 Concepto presence rules, ordered 1:N
+semantics, raw lexical plus exact Decimal preservation, and `ObjetoImp` as required in 4.0
+and absent/version-forbidden in 3.3. Concept-level taxes and aggregate taxes remain separate
+future slices. Concepts parser and persistence implementation have not started; the next
+implementation checkpoint is CFDI Concepts Parser Implementation.
+
+SIF and Reconciliation are not implemented by this milestone.
 
 The Policy Identity architecture/design is accepted, and the source-evidence review has
 materially advanced through `ACCOUNTING_SOURCE_EVIDENCE.md`. PolicyIdentitySchema v1 is
